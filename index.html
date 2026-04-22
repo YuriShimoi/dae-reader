@@ -43,7 +43,7 @@
   </head>
   <body style="">
     <input id="daeinput" type="file" accept=".dae">
-    <canvas id="3d-simulation" width="640" height="480"></canvas>
+    <canvas id="3d-simulation" width="1280" height="960"></canvas>
     <pre id="output">... dae-file.dae</pre>
     
     <script
@@ -67,7 +67,6 @@
           
           reader.onload = (e) => {
             output.textContent = formatDae(e.target.result);
-            drawDae();
           };
 
           reader.readAsText(file);
@@ -76,7 +75,7 @@
 
       let daeinfo = {};
       function formatDae(filejson) {
-        const cleanjson = filejson.replaceAll('  ', '').replaceAll('\n', '').replaceAll('\t', '');
+        const cleanjson = filejson.replaceAll('  ', '').replaceAll('\n', '').replaceAll('\t', '').replaceAll('\r', '');
 
         const getAttr = (jheader, attr) => {
           if(!jheader) return '';
@@ -111,9 +110,8 @@
             }
             return hkey;
           }
-
+          
           if(tjson[0] !== '<') return null;
-                    
           const jheader = tjson.substring(1, tjson.indexOf('>'));
           const jtag = jheader.substring(0, jheader.indexOf(' ')) || jheader;
 
@@ -121,7 +119,22 @@
           if(jheader.at(-1) === '/') return [getKey(jheader, jtag), searchKeys(jheader.substring(0, jheader.indexOf('/'))), tjson.substring(jheader.length + 2)];
           if(jheader[0] === '!') return getNextTag(tjson.substring(tjson.indexOf('-->') + 3));
           
-          const jbody = tjson.substring(2+jheader.length, tjson.indexOf(`</${jtag}>`), jtag);
+          let jbody = tjson.substring(2+jheader.length, tjson.indexOf(`</${jtag}>`), jtag);
+          let innerbody = tjson.substring(1);
+          let deph = 0;
+          let has_deph = false;
+          while(innerbody.indexOf(`<${jtag}`) != -1 && innerbody.indexOf(`<${jtag}`) < innerbody.indexOf(`</${jtag}>`)) {
+            deph++;
+            has_deph = true;
+            innerbody = innerbody.substring(innerbody.indexOf(`<${jtag}`)+1);
+          }
+          while(deph--) {
+            innerbody = innerbody.substring(innerbody.indexOf(`</${jtag}>`)+1);
+          }
+          if(has_deph) {
+            let endindex = innerbody.length - innerbody.indexOf(`</${jtag}>`);
+            jbody = tjson.substring(2+jheader.length, tjson.length - endindex, jtag);
+          }
           return [getKey(jheader, jtag === 'COLLADA'? jtag: jheader), jbody, tjson.substring(jbody.length + jtag.length + jheader.length + 5)];
         };
 
@@ -146,25 +159,56 @@
         const iter = iterate(cleanjson);
         daeinfo.raw = iter;
 
-        let sceneid = Object.keys(iter.xml.COLLADA.library_visual_scenes)[0];
-        let objid = Object.keys(iter.xml.COLLADA.library_visual_scenes[sceneid])[0];
-        let node = iter.xml.COLLADA.library_visual_scenes[sceneid][objid];
-        let meshid = ('instance_geometry' in node? node.instance_geometry.url: getAttr(Object.keys(node).filter(k => k.includes('instance_geometry'))[0], 'url')).substring(1);
+        try {
+          let sceneid = Object.keys(iter.xml.COLLADA.library_visual_scenes)[0];
+          let objid = Object.keys(iter.xml.COLLADA.library_visual_scenes[sceneid])[0];
+          let node = iter.xml.COLLADA.library_visual_scenes[sceneid][objid];
+          let meshid = '';
+          if('instance_geometry' in node) {
+            meshid = node.instance_geometry.url.substring(1);
+          }
+          else if(Object.keys(node).filter(k => k.includes('instance_geometry'))[0]) {
+            meshid = getAttr(Object.keys(node).filter(k => k.includes('instance_geometry'))[0], 'url').substring(1);
+          }
+          else if(Object.keys(node).filter(k => k.includes('node_'))[0]) {
+            let nodept = node;
+            while(nodept = nodept[Object.keys(nodept).filter(k => k.includes('node_'))[0]]) {
+              if(Object.keys(nodept).filter(k => k.includes('instance_geometry'))[0]) {
+                break;
+              }
+            }
+            let igeokey = Object.keys(nodept).filter(k => k.includes('instance_geometry'))[0];
+            meshid = (igeokey === 'instance_geometry'? nodept[igeokey].url: getAttr(igeokey, 'url')).substring(1);
+          }
+  
+          daeinfo.matrix = iter.xml.COLLADA.library_visual_scenes[sceneid][objid].transform || iter.xml.COLLADA.library_visual_scenes[sceneid][objid].matrix;
+  
+          let obj_mesh = iter.xml.COLLADA.library_geometries[meshid].mesh;
+          let obj_mesh_pos = obj_mesh[meshid+'-positions']? obj_mesh[meshid+'-positions'][meshid+'-positions-array']: obj_mesh['pos_0']['pos_0-array'];
+          let mmaps = obj_mesh_pos.trim().split(' ').map(Number);
+          daeinfo.meshes = Array(Math.floor(mmaps.length/3)).fill().map((_, i) => [mmaps[0+3*i], mmaps[1+3*i], mmaps[2+3*i]]);
+          
+          daeinfo.triangles = [];
+          for(let tkey of Object.keys(obj_mesh).filter(k => k.includes('triangles') || k.includes('polylist'))) {
+            let obj_triangles = obj_mesh[tkey].p;
 
-        daeinfo.matrix = iter.xml.COLLADA.library_visual_scenes[sceneid][objid].transform;
+            let exp_amount = Number(getAttr(tkey, 'count') ?? 0);
+            if(!exp_amount) break;
 
-        let obj_mesh = iter.xml.COLLADA.library_geometries[meshid].mesh;
-        let obj_mesh_pos = obj_mesh[meshid+'-positions'][meshid+'-positions-array'];
-        let mmaps = obj_mesh_pos.split(' ').map(Number);
-        daeinfo.meshes = Array(mmaps.length/3).fill().map((_, i) => [mmaps[0+3*i], mmaps[1+3*i], mmaps[2+3*i]]);
-        
-        daeinfo.triangles = [];
-        for(let tkey of Object.keys(obj_mesh).filter(k => k.includes('triangles'))) {
-          let obj_triangles = obj_mesh[tkey].p;
-          let tmaps = obj_triangles.split(' ').map(Number).reduce((acc, v, i) => i%3 == 0? [...acc, v]: acc, []);
-          daeinfo.triangles = daeinfo.triangles.concat(Array(tmaps.length/3).fill().map((_, i) => [tmaps[0+3*i], tmaps[1+3*i], tmaps[2+3*i]]));
+            let vpos = Number(obj_mesh[tkey]?.VERTEX?.offset ?? 0);
+            let t_coords = obj_triangles.split(' ').map(Number);
+            let v_per_coord = Math.round(t_coords.length / exp_amount / 3);
+            let tmaps = t_coords.reduce((acc, v, i) => i%v_per_coord == vpos? [...acc, v]: acc, []);
+            daeinfo.triangles = daeinfo.triangles.concat(Array(Math.floor(tmaps.length/3)).fill().map((_, i) => [tmaps[0+3*i], tmaps[1+3*i], tmaps[2+3*i]]));
+          }
+
+          drawDae();
         }
-        
+        catch(e) {
+          console.error(e);
+          alert('problem with triangles reading');
+        }
+
         return JSON.stringify(iter, null, '  ');
       }
       
@@ -227,7 +271,7 @@
           this.rot = 0;
           this.bg = bg;
           this.m = mat4.create();
-          this.pr = mat4.perspective(mat4.create(), 0.8, 1, 0.1, 10);
+          this.pr = mat4.perspective(mat4.create(), 0.8, 1, 0.1, 20);
         }
 
         start() {
