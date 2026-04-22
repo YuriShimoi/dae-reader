@@ -243,7 +243,7 @@
           gl.useProgram(this.prog);
 
           // 2. Geometry (Multiple Triangles)
-          const pts = new Float32Array(triangles); // Two triangles (Square)
+          const pts = new Float32Array(triangles);
           for (let i = 0; i < pts.length; i += 3) {
             let v = vec3.fromValues(pts[i], pts[i + 1], pts[i + 2]);
             vec3.transformMat4(v, v, initMat);
@@ -263,7 +263,6 @@
           // 3. Uniforms & State
           this.gl = gl;
           this.gl.enable(this.gl.DEPTH_TEST);
-          this.gl.depthFunc(this.gl.LEQUAL);
 
           this.mLoc = gl.getUniformLocation(this.prog, 'm');
           this.prLoc = gl.getUniformLocation(this.prog, 'pr');
@@ -277,7 +276,7 @@
         start() {
           const draw = () => {
             this.gl.clearColor(...this.bg);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
             
             this.rot += 0.02;
             mat4.identity(this.m);
@@ -289,11 +288,16 @@
             this.gl.uniformMatrix4fv(this.prLoc, false, this.pr);
             this.gl.uniformMatrix4fv(this.mLoc, false, this.m);
 
+            const totalVertices = this.gl.getBufferParameter(this.gl.ARRAY_BUFFER, this.gl.BUFFER_SIZE) / 12; // 12 bytes per vec3
+            const cLoc = this.gl.getUniformLocation(this.prog, 'c');
+
             this.gl.uniform4fv(this.gl.getUniformLocation(this.prog, 'c'), this.fg);
             this.gl.drawArrays(this.gl.TRIANGLES, 0, 9999);
 
-            this.gl.uniform4fv(this.gl.getUniformLocation(this.prog, 'c'), this.fl);
-            this.gl.drawArrays(this.gl.LINE_LOOP, 0, 9999);
+            this.gl.uniform4fv(cLoc, this.fl);
+            for (let i = 0; i < totalVertices; i += 3) {
+              this.gl.drawArrays(this.gl.LINE_LOOP, i, 3);
+            }
 
             MiniGL.animationFrameId = requestAnimationFrame(draw);
           };
