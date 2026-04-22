@@ -25,7 +25,10 @@
       }
 
       canvas {
-        height: 60vh;
+        height: 60dvh;
+      }
+      canvas[fullscreen] {
+        height: 100dvh;
       }
       pre {
         max-width: 100vw;
@@ -36,15 +39,39 @@
         color: white;
         width: 100%;
         margin: 0;
-        padding: 3px 0;
-        margin-top: -9px;
+        padding: 2px 0;
+      }
+
+      #full-screen-btn {
+        position: absolute;
+        right: 16px;
+        top: 16px;
+        height: 40px;
+        aspect-ratio: 1;
+        margin: 0;
+        padding: 0;
+        border: 2px solid white;
+        border-radius: 6px;
+        color: white;
+        background: black;
+        font-weight: bold;
+        font-size: 28px;
+        outline: none;
+        cursor: pointer;
+        font-family: monospace;
+        rotate: 90deg;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
       }
     </style>
   </head>
-  <body style="">
+  <body>
     <input id="daeinput" type="file" accept=".dae">
-    <canvas id="3d-simulation" width="1280" height="960"></canvas>
+    <canvas id="3d-simulation" width="1280" height="960">
+    </canvas>
     <pre id="output">... dae-file.dae</pre>
+    <button id="full-screen-btn">↹</button>
     
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"
@@ -55,8 +82,11 @@
     <script defer>
       const input = document.getElementById('daeinput');
 
+      document.getElementById('full-screen-btn').onclick = () => {
+        document.getElementById('3d-simulation').toggleAttribute('fullscreen');
+      };
       document.onclick = (ev) => {
-        if(ev.target.nodeName !== 'PRE') {
+        if(ev.target.nodeName !== 'PRE' && ev.target.nodeName !== 'BUTTON') {
           input.click(ev);
         }
       };
