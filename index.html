@@ -218,7 +218,17 @@
           daeinfo.matrix = iter.xml.COLLADA.library_visual_scenes[sceneid][objid].transform || iter.xml.COLLADA.library_visual_scenes[sceneid][objid].matrix;
   
           let obj_mesh = iter.xml.COLLADA.library_geometries[meshid].mesh;
-          let obj_mesh_pos = obj_mesh[meshid+'-positions']? obj_mesh[meshid+'-positions'][meshid+'-positions-array']: obj_mesh['pos_0']['pos_0-array'];
+          let obj_mesh_pos = "";
+          if(obj_mesh[meshid+'-positions']) {
+            obj_mesh_pos = obj_mesh[meshid+'-positions'][meshid+'-positions-array'];
+          }
+          else if(obj_mesh['pos_0']) {
+            let obj_mesh_pos = obj_mesh['pos_0']['pos_0-array'];
+          }
+          else {
+            let frsk = Object.keys(obj_mesh)[0];
+            obj_mesh_pos = obj_mesh[frsk][Object.keys(obj_mesh[frsk])[0]];
+          }
           let mmaps = obj_mesh_pos.trim().split(' ').map(Number);
           daeinfo.meshes = Array(Math.floor(mmaps.length/3)).fill().map((_, i) => [mmaps[0+3*i], mmaps[1+3*i], mmaps[2+3*i]]);
           
